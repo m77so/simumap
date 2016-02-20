@@ -1,11 +1,13 @@
 {
 	"filename":"out10.png",
 	"area":{
-		"east": 142, 
-		"north": 37, 
-		"south": 34, 
-		"west": 138
+		"east": 140, 
+		"north": 36, 
+		"south": 35, 
+		"west": 139
 	},
+	"drawing" : "degree",
+	"margin" : "fill",
 	"elevation":{
 		"water": -50,
 		"level":[

@@ -18,14 +18,28 @@ import (
 
 	"image/png"
 	"bytes"
+	"strings"
 )
 
 var CELL_SIZE int = 1201
 var CELL_SWBD_SIZE int = 3601
-var height_level []level
+var elevation_level []level
 var water_level int16
+var drawing_style drawing
+var margin_style margin
+var area mapRectangle
+var lm largeMap
 
-
+type drawing int8
+const(
+	Degree drawing =iota
+	Mercator
+)
+type margin int8
+const(
+	Fill margin = iota
+	Water
+)
 type mapRectangle struct {
 	North float64
 	East  float64
@@ -45,10 +59,19 @@ type jsonData struct{
 	Area mapRectangle
 	Elevation elevation
 	Filename string
+	Drawing string
+	Margin string
+}
+type elevationData struct{
+	data []int16
+	width int
+	lat int16
+	lon int16
+	received bool
 }
 type cell struct {
 	data   *image.RGBA
-	height []int16
+	elevation []int16
 	lat    int16
 	lon    int16
 }
@@ -57,37 +80,18 @@ type largeMap struct {
 	data   *image.RGBA
 }
 
-func newLargeMap(domain mapRectangle) largeMap {
+func newLargeMap(domain mapRectangle, width ,height int) largeMap {
 	var lm largeMap
 	lm.domain = domain
-	var width int = int(math.Floor(lm.domain.East-lm.domain.West)) * int(CELL_SIZE)
-	var height int = int(math.Floor(lm.domain.North-lm.domain.South)) * int(CELL_SIZE)
+
 	lm.data = image.NewRGBA(image.Rect(0, 0, width, height))
 	return lm
 }
 func (lm *largeMap) setCell(c cell) {
-	var x_offset int = int(math.Floor(float64(c.lon)-lm.domain.West)) * CELL_SIZE
-	var y_offset int = int(math.Floor(lm.domain.North-float64(c.lat)-1)) * CELL_SIZE
-	width := int(lm.data.Bounds().Dx())
-	height := int(lm.data.Bounds().Dy())
-	var x, y int
-	for y = 0; y < CELL_SIZE; y++ {
-		if y_offset+y < 0 {
-			y = -y_offset
-		} else if y_offset+y > height {
-			break
-		}
-		for x = 0; x < CELL_SIZE; x++ {
-			if x_offset+x < 0 {
-				x = -x_offset
-			} else if x_offset+x > width {
-				break
-			}
-			(lm.data).SetRGBA(int(x_offset+x), int(y_offset+y), c.data.RGBAAt(x, y))
-		}
-	}
+
 }
 func saveImage(data image.Image, filename string) {
+
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatalln(err)
@@ -104,51 +108,24 @@ func FileExists(filename string) bool {
 	_, err := os.Stat(filename)
 	return err == nil
 }
-func initCell(lat int16, lon int16) cell {
-	var c cell
-	c.data = image.NewRGBA(image.Rect(0, 0, CELL_SIZE, CELL_SIZE))
-	c.lat = lat
-	c.lon = lon
-	for y := 0; y < CELL_SIZE; y++ {
-		for x := 0; x < CELL_SIZE; x++ {
-			cl := color.RGBA{0, 0, 0, 255}
-			(c.data).SetRGBA(x, y, cl)
-		}
-	}
-	return c
-}
-func heightToColor(height int16) color.RGBA {
+
+func elevationToColor(elevation int16) color.RGBA {
 
 	var num uint8 = 16
 
-	for _, level := range height_level{
-		if height >= level.Min && height <= level.Max {
+	for _, level := range elevation_level{
+		if elevation >= level.Min && elevation <= level.Max {
 			num = level.Bright
 			break
 		}
 	}
 
-	if height <= water_level {
+	if elevation <= water_level {
 		return color.RGBA{0, 0, num, 255}
 	}
 	return color.RGBA{0, num, 0, 255}
 }
-func hgtToCell(lat int16, lon int16, hgt *os.File, swbd []byte) cell {
-	fmt.Printf("hgt to cell: lat %d lon %d\n",lat,lon)
-	var c cell = initCell(lat, lon)
-	var height int16
-	for y := 0; y < CELL_SIZE; y++ {
-		for x := 0; x < CELL_SIZE; x++ {
-			binary.Read(hgt, binary.BigEndian, &height)
-			if swbd[(y*3)*CELL_SWBD_SIZE + (x*3)] == 0xff {
-				height = -999
-			}
-			cl := heightToColor(height)
-			(c.data).SetRGBA(x, y, cl)
-		}
-	}
-	return c
-}
+
 
 type sliceReaderAt []byte
 
@@ -194,10 +171,17 @@ func UnzipFirstfile(body io.Reader, size int64, dest string, ret_byte bool) ([]b
 		return nil,nil
 	}
 }
-func Download(lat int16, lon int16) cell {
+func Download(lat int16, lon int16) elevationData {
 	var filename_hgt string = fmt.Sprintf("N%02dE%03d.SRTMGL3.hgt", lat, lon)
 	var filename_swbd string = fmt.Sprintf("N%02dE%03d.SRTMSWBD.raw", lat, lon)
 	var url string = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMGL3.003/2000.02.11/%s.zip", filename_hgt)
+	var cellElevationData elevationData
+	cellElevationData.data = make([]int16,CELL_SIZE*CELL_SIZE)
+	cellElevationData.width = CELL_SIZE
+	cellElevationData.lat = lat
+	cellElevationData.lon = lon
+	cellElevationData.received = false
+
 	fmt.Printf("\nLat:%d Lon:%d\n", lat,lon)
 	if !FileExists(filename_hgt) {
 		fmt.Printf(" Download hgt...\n")
@@ -208,7 +192,8 @@ func Download(lat int16, lon int16) cell {
 		defer res.Body.Close()
 		if res.StatusCode == 404 {
 			fmt.Println("hgt not found")
-			return initCell(lat, lon)
+			cellElevationData.received = false
+			return cellElevationData
 		}
 		UnzipFirstfile(res.Body, res.ContentLength, filename_hgt,false)
 	}
@@ -225,7 +210,8 @@ func Download(lat int16, lon int16) cell {
 		}
 		defer res.Body.Close()
 		if res.StatusCode == 404 {
-			return initCell(lat, lon)
+			cellElevationData.received = false
+			return cellElevationData
 		}
 		var swbdDataZipped []byte
 
@@ -264,10 +250,62 @@ func Download(lat int16, lon int16) cell {
 	if hgtFile, err = os.Open(filename_hgt); err != nil {
 		log.Fatalln(err)
 	}
+	var elevation int16
+	 cellElevationData.received = true
+	for y := 0; y < CELL_SIZE; y++ {
+		for x := 0; x < CELL_SIZE; x++ {
+			binary.Read(hgtFile, binary.BigEndian, &elevation)
+			if swbdData[(y*3)*CELL_SWBD_SIZE + (x*3)] == 0xff {
+				elevation = water_level
+			}
+			cellElevationData.data[y*cellElevationData.width + x] = elevation
+		}
+	}
+	return cellElevationData
 
-	return hgtToCell(lat, lon, hgtFile, swbdData)
+}
+func degreeMap(){
+	var mapDomain mapRectangle = area
+	var width int = int(math.Floor(mapDomain.East-mapDomain.West)) * int(CELL_SIZE)
+	var height int = int(math.Floor(mapDomain.North-mapDomain.South)) * int(CELL_SIZE)
+	lm = newLargeMap(area,width,height)
+	println(lm.data.Bounds().Dx())
+	for lat := int16(math.Floor(mapDomain.South)); float64(lat) < mapDomain.North; lat++ {
+		for lon := int16(math.Floor(mapDomain.West)); float64(lon) <mapDomain.East; lon++ {
+			elevationData := Download(lat, lon)
 
-	//return nil
+			var x_offset int = int(math.Floor(float64(elevationData.lon)-mapDomain.West)) * CELL_SIZE
+			var y_offset int = int(math.Floor(mapDomain.North-float64(elevationData.lat)-1)) * CELL_SIZE
+			width := int(lm.data.Bounds().Dx())
+			height := int(lm.data.Bounds().Dy())
+			var x, y int
+			for y = 0; y < CELL_SIZE; y++ {
+				if y_offset+y < 0 {
+					y = -y_offset
+				} else if y_offset+y > height {
+					break
+				}
+				for x = 0; x < CELL_SIZE; x++ {
+					if x_offset + x < 0 {
+						x = -x_offset
+					} else if x_offset + x > width {
+						break
+					}
+					var elevation int16
+					if elevationData.received {
+						elevation = elevationData.data[y * elevationData.width + x]
+					}else{
+						elevation = math.MinInt16
+					}
+					cl := elevationToColor(elevation)
+					(lm.data).SetRGBA(int(x_offset+x), int(y_offset+y),cl)
+				}
+			}
+		}
+	}
+}
+func mercatorMap(){
+
 }
 func main() {
 
@@ -275,23 +313,41 @@ func main() {
 	var jsonIn jsonData
 	dec.Decode(&jsonIn)
 	fmt.Printf("%+v\n", jsonIn)
-	var area mapRectangle = jsonIn.Area
+	area  = jsonIn.Area
 
-	height_level = jsonIn.Elevation.Level // global
+	elevation_level = jsonIn.Elevation.Level // global
 	water_level = jsonIn.Elevation.Water  //global
 
+
+	margin_type_string := strings.ToLower(jsonIn.Margin)
+	switch margin_type_string {
+	case "fill":
+		margin_style = Fill
+	case "water":
+		margin_style = Water
+	default:
+		margin_style = Water
+	}
+
 	if area.North < area.South {
-		fmt.Errorf("North lat is more south than South lat.")
+		fmt.Println("North lat is more south than South lat.")
+		os.Exit(1)
 	}
 	if area.East < area.West {
 		area.East += 360
 	}
-	var lm largeMap = newLargeMap(area)
-	for lat := int16(math.Floor(area.South)); float64(lat) < area.North; lat++ {
-		for lon := int16(math.Floor(area.West)); float64(lon) < area.East; lon++ {
-			cell := Download(lat, lon)
-			lm.setCell(cell)
-		}
+	drawing_type_string := strings.ToLower(jsonIn.Drawing)
+	switch drawing_type_string {
+	case "mercator":
+		drawing_style = Mercator
+		mercatorMap()
+	case "degree":
+		drawing_style = Degree
+		degreeMap()
+	default:
+		drawing_style = Degree
+		degreeMap()
 	}
+
 	lm.SaveImageLarge(jsonIn.Filename)
 }
