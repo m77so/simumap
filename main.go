@@ -14,9 +14,10 @@ import (
 	"log"
 	"math"
 	"net/http"
-		"golang.org/x/image/bmp"
+//		"golang.org/x/image/bmp"
 
-	//"image/png"
+	"image/png"
+	"bytes"
 )
 
 var CELL_SIZE int = 1201
@@ -43,6 +44,7 @@ type elevation struct{
 type jsonData struct{
 	Area mapRectangle
 	Elevation elevation
+	Filename string
 }
 type cell struct {
 	data   *image.RGBA
@@ -87,13 +89,12 @@ func (lm *largeMap) setCell(c cell) {
 }
 func saveImage(data image.Image, filename string) {
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0666)
-
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	if err = bmp.Encode(f, data); err != nil {
-		log.Fatalln(err)
+	if err = png.Encode(f, data); err != nil {
+	//	log.Fatalln(err)
+		fmt.Println(err.Error())
 	}
 }
 func (lm *largeMap) SaveImageLarge(filename string) {
@@ -110,7 +111,7 @@ func initCell(lat int16, lon int16) cell {
 	c.lon = lon
 	for y := 0; y < CELL_SIZE; y++ {
 		for x := 0; x < CELL_SIZE; x++ {
-			cl := color.RGBA{0, 0, 0, 0}
+			cl := color.RGBA{0, 0, 0, 255}
 			(c.data).SetRGBA(x, y, cl)
 		}
 	}
@@ -128,14 +129,14 @@ func heightToColor(height int16) color.RGBA {
 	}
 
 	if height <= water_level {
-		return color.RGBA{0, 0, num, 0}
+		return color.RGBA{0, 0, num, 255}
 	}
-	return color.RGBA{0, num, 0, 0}
+	return color.RGBA{0, num, 0, 255}
 }
 func hgtToCell(lat int16, lon int16, hgt *os.File, swbd []byte) cell {
+	fmt.Printf("hgt to cell: lat %d lon %d\n",lat,lon)
 	var c cell = initCell(lat, lon)
 	var height int16
-	 println(len(swbd))
 	for y := 0; y < CELL_SIZE; y++ {
 		for x := 0; x < CELL_SIZE; x++ {
 			binary.Read(hgt, binary.BigEndian, &height)
@@ -173,18 +174,20 @@ func UnzipFirstfile(body io.Reader, size int64, dest string, ret_byte bool) ([]b
 		return nil,err
 	}
 	rc, err := rd.File[0].Open()
-	defer func() {
+ 	defer func() {
 		rc.Close()
 	}()
 	buf := make([]byte, rd.File[0].UncompressedSize)
-	if _, err = io.ReadFull(rc, buf); err != nil {
+ 	if _, err = io.ReadFull(rc, buf); err != nil {
+
 		return nil,err
 	}
-	if dest !="" {
+ 	if dest !="" {
 		if err = ioutil.WriteFile(dest, buf, 666); err!=nil{
 			return nil,err
 		}
 	}
+
 	if ret_byte == true{
 		return buf,nil
 	}else{
@@ -195,14 +198,16 @@ func Download(lat int16, lon int16) cell {
 	var filename_hgt string = fmt.Sprintf("N%02dE%03d.SRTMGL3.hgt", lat, lon)
 	var filename_swbd string = fmt.Sprintf("N%02dE%03d.SRTMSWBD.raw", lat, lon)
 	var url string = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMGL3.003/2000.02.11/%s.zip", filename_hgt)
-	fmt.Printf("HGT file:%s \n", filename_hgt)
+	fmt.Printf("\nLat:%d Lon:%d\n", lat,lon)
 	if !FileExists(filename_hgt) {
+		fmt.Printf(" Download hgt...\n")
 		res, err := http.Get(url)
 		if err != nil {
 			fmt.Println(err)
 		}
 		defer res.Body.Close()
 		if res.StatusCode == 404 {
+			fmt.Println("hgt not found")
 			return initCell(lat, lon)
 		}
 		UnzipFirstfile(res.Body, res.ContentLength, filename_hgt,false)
@@ -211,8 +216,9 @@ func Download(lat int16, lon int16) cell {
 
 	var swbdData []byte
 	url = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMSWBD.003/2000.02.11/%s.zip", filename_swbd)
-
-	if !FileExists(fmt.Sprintf("%s.zip",filename_swbd)) {
+	filename_swbd_zipped := fmt.Sprintf("%s.zip",filename_swbd)
+	if !FileExists(filename_swbd_zipped) {
+		fmt.Println("Download SWBD...")
 		res, err := http.Get(url)
 		if err != nil {
 			log.Fatalln(err)
@@ -221,13 +227,25 @@ func Download(lat int16, lon int16) cell {
 		if res.StatusCode == 404 {
 			return initCell(lat, lon)
 		}
-		swbdData, err = UnzipFirstfile(res.Body, res.ContentLength, "", true)
+		var swbdDataZipped []byte
+
+		swbdDataZipped, err = ioutil.ReadAll(res.Body)
+		if err  != nil{
+			log.Fatalln(err)
+		}
+		err = ioutil.WriteFile(filename_swbd_zipped,swbdDataZipped,666)
+
+		if err!=nil{
+			log.Fatalln(err)
+		}
+		swbdData, err = UnzipFirstfile(bytes.NewReader(swbdDataZipped), res.ContentLength, "", true)
+
 		if err != nil{
 			log.Fatalln(err)
 		}
 	}else{
 		var swbdFile *os.File
-		swbdFile, err := os.Open(filename_swbd)
+		swbdFile, err := os.Open(filename_swbd_zipped)
 		if  err!=nil{
 			log.Fatalln(err)
 		}
@@ -275,5 +293,5 @@ func main() {
 			lm.setCell(cell)
 		}
 	}
-	lm.SaveImageLarge("out2.bmp")
+	lm.SaveImageLarge(jsonIn.Filename)
 }
