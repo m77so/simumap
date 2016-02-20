@@ -266,16 +266,16 @@ func Download(lat int16, lon int16) elevationData {
 }
 func degreeMap(){
 	var mapDomain mapRectangle = area
-	var width int = int(math.Floor(mapDomain.East-mapDomain.West)) * int(CELL_SIZE)
-	var height int = int(math.Floor(mapDomain.North-mapDomain.South)) * int(CELL_SIZE)
+	var width int = int(math.Floor( ( mapDomain.East-mapDomain.West) * float64(CELL_SIZE) ))
+	var height int = int(math.Floor( (mapDomain.North-mapDomain.South) * float64(CELL_SIZE) ))
 	lm = newLargeMap(area,width,height)
 	println(lm.data.Bounds().Dx())
 	for lat := int16(math.Floor(mapDomain.South)); float64(lat) < mapDomain.North; lat++ {
 		for lon := int16(math.Floor(mapDomain.West)); float64(lon) <mapDomain.East; lon++ {
 			elevationData := Download(lat, lon)
 
-			var x_offset int = int(math.Floor(float64(elevationData.lon)-mapDomain.West)) * CELL_SIZE
-			var y_offset int = int(math.Floor(mapDomain.North-float64(elevationData.lat)-1)) * CELL_SIZE
+			var x_offset int = int(math.Floor( ( float64(elevationData.lon)-mapDomain.West) * float64(CELL_SIZE) ))
+			var y_offset int = int(math.Floor( (mapDomain.North-float64(elevationData.lat)-1) * float64(CELL_SIZE) ))
 			width := int(lm.data.Bounds().Dx())
 			height := int(lm.data.Bounds().Dy())
 			var x, y int
@@ -292,6 +292,7 @@ func degreeMap(){
 						break
 					}
 					var elevation int16
+
 					if elevationData.received {
 						elevation = elevationData.data[y * elevationData.width + x]
 					}else{
