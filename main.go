@@ -21,7 +21,8 @@ import (
 
 var CELL_SIZE int = 1201
 var CELL_SWBD_SIZE int = 3601
-
+var height_level []level
+var water_level int16
 
 
 type mapRectangle struct {
@@ -29,6 +30,19 @@ type mapRectangle struct {
 	East  float64
 	West  float64
 	South float64
+}
+type level struct{
+	Max int16
+	Min int16
+	Bright uint8
+}
+type elevation struct{
+	Water int16
+	Level []level
+}
+type jsonData struct{
+	Area mapRectangle
+	Elevation elevation
 }
 type cell struct {
 	data   *image.RGBA
@@ -104,17 +118,18 @@ func initCell(lat int16, lon int16) cell {
 }
 func heightToColor(height int16) color.RGBA {
 
-	var num uint8
+	var num uint8 = 16
 
-	num = uint8(math.Floor((float64(height) / 5000 * 107)) + 145)
-	if height < 0 {
-		num = 140
+	for _, level := range height_level{
+		if height >= level.Min && height <= level.Max {
+			num = level.Bright
+			break
+		}
+	}
+
+	if height <= water_level {
 		return color.RGBA{0, 0, num, 0}
 	}
-	if height > 5000 {
-		num = 255
-	}
-
 	return color.RGBA{0, num, 0, 0}
 }
 func hgtToCell(lat int16, lon int16, hgt *os.File, swbd []byte) cell {
@@ -239,9 +254,13 @@ func Download(lat int16, lon int16) cell {
 func main() {
 
 	dec := json.NewDecoder(os.Stdin)
-	var area mapRectangle
-	dec.Decode(&area)
-	fmt.Printf("%+v\n", area)
+	var jsonIn jsonData
+	dec.Decode(&jsonIn)
+	fmt.Printf("%+v\n", jsonIn)
+	var area mapRectangle = jsonIn.Area
+
+	height_level = jsonIn.Elevation.Level // global
+	water_level = jsonIn.Elevation.Water  //global
 
 	if area.North < area.South {
 		fmt.Errorf("North lat is more south than South lat.")
