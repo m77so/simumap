@@ -1,0 +1,44 @@
+{
+	"filename":"meishin250.png",
+	"area":{
+		"east": 138.2, 
+		"north": 36.2, 
+		"south": 33.5, 
+		"west": 134
+	},
+	"drawing" : {
+		"style" : "Mercator",
+		"pixelsize" : 250,
+		"baselat" : 35,
+		"margin" : "fill"
+	},
+	"elevation":{
+		"water": -50,
+		"level":[
+{"min":-32767,"max":-19000,"bright":5},
+{"min":-19000,"max":-12000,"bright":16},
+{"min":-12000,"max":-8000,"bright":27},
+{"min":-8000,"max":-5000,"bright":37},
+{"min":-5000,"max":-19000,"bright":48},
+{"min":-19000,"max":-12000,"bright":59},
+{"min":-12000,"max":-8000,"bright":69},
+{"min":-8000,"max":-5000,"bright":80},
+{"min":-5000,"max":-2000,"bright":91},
+{"min":-2000,"max":-500,"bright":101},
+{"min":-500,"max":-100,"bright":112},
+{"min":-100,"max":-50,"bright":123},
+{"min":-50,"max":50,"bright":133},
+{"min":50,"max":100,"bright":144},
+{"min":100,"max":200,"bright":155},
+{"min":200,"max":400,"bright":165},
+{"min":400,"max":600,"bright":176},
+{"min":600,"max":800,"bright":187},
+{"min":800,"max":1100,"bright":197},
+{"min":1100,"max":1500,"bright":208},
+{"min":1500,"max":1900,"bright":219},
+{"min":1900,"max":2300,"bright":229},
+{"min":2300,"max":2600,"bright":240},
+{"min":2600,"max":32767,"bright":251}
+		]
+	}
+}
