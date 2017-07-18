@@ -1,13 +1,17 @@
 {
-	"filename":"out10.png",
+	"filename":"out11d3.png",
 	"area":{
 		"east": 140, 
 		"north": 36, 
 		"south": 35, 
 		"west": 139
 	},
-	"drawing" : "degree",
-	"margin" : "fill",
+	"drawing" : {
+		"style" : "Mercator",
+		"pixelsize" : 90,
+		"baselat" : 99,
+		"margin" : "fill"
+	},
 	"elevation":{
 		"water": -50,
 		"level":[

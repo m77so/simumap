@@ -13,10 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
-	"net/http"
-	//		"golang.org/x/image/bmp"
 
-	"bytes"
 	"image/png"
 	"strings"
 )
@@ -184,7 +181,7 @@ func UnzipFirstfile(body io.Reader, size int64, dest string, ret_byte bool) ([]b
 func Download(lat int16, lon int16) (elevationData, []byte) {
 	var filename_hgt string = fmt.Sprintf("N%02dE%03d.SRTMGL3.hgt", lat, lon)
 	var filename_swbd string = fmt.Sprintf("N%02dE%03d.SRTMSWBD.raw", lat, lon)
-	var url string = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMGL3.003/2000.02.11/%s.zip", filename_hgt)
+
 	var cellElevationData elevationData
 	cellElevationData.data = make([]int16, CELL_SIZE*CELL_SIZE)
 	cellElevationData.width = CELL_SIZE
@@ -193,52 +190,20 @@ func Download(lat int16, lon int16) (elevationData, []byte) {
 	cellElevationData.received = false
 	var swbdData []byte
 	fmt.Printf("\nLat:%d Lon:%d\n", lat, lon)
+    
 	if !FileExists(filename_hgt) {
-		fmt.Printf(" Download hgt...\n")
-		res, err := http.Get(url)
-		if err != nil {
-			fmt.Println(err)
-		}
-		if res != nil{
-			defer res.Body.Close()
-		}
-		if res.StatusCode == 404 || err != nil {
-			fmt.Println("hgt not found")
+		
 			cellElevationData.received = false
 			return cellElevationData, swbdData
-		}
-		UnzipFirstfile(res.Body, res.ContentLength, filename_hgt, false)
 	}
+    
 
-	url = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMSWBD.003/2000.02.11/%s.zip", filename_swbd)
+	
 	filename_swbd_zipped := fmt.Sprintf("%s.zip", filename_swbd)
 	if !FileExists(filename_swbd_zipped) {
-		fmt.Println("Download SWBD...")
-		res, err := http.Get(url)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		defer res.Body.Close()
-		if res.StatusCode == 404 {
 			cellElevationData.received = false
 			return cellElevationData, swbdData
-		}
-		var swbdDataZipped []byte
-
-		swbdDataZipped, err = ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		err = ioutil.WriteFile(filename_swbd_zipped, swbdDataZipped, 666)
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-		swbdData, err = UnzipFirstfile(bytes.NewReader(swbdDataZipped), res.ContentLength, "", true)
-
-		if err != nil {
-			log.Fatalln(err)
-		}
+		
 	} else {
 		var swbdFile *os.File
 		swbdFile, err := os.Open(filename_swbd_zipped)
