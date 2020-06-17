@@ -13,9 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
-	"net/http"
-	//		"golang.org/x/image/bmp"
-
+	"flag"
 	"bytes"
 	"image/png"
 	"strings"
@@ -181,90 +179,67 @@ func UnzipFirstfile(body io.Reader, size int64, dest string, ret_byte bool) ([]b
 		return nil, nil
 	}
 }
-func Download(lat int16, lon int16) (elevationData, []byte) {
+
+func unzip(filename string)  ([]byte) {
+	var fl *os.File
+	var data []byte
+	fl, err := os.Open(filename)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fi, err := fl.Stat()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	data, err = UnzipFirstfile(fl, fi.Size(), "", true)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return data
+}
+
+func Download(lat int16, lon int16, dryrun bool) (elevationData, []byte) {
 	var filename_hgt string = fmt.Sprintf("N%02dE%03d.SRTMGL3.hgt", lat, lon)
 	var filename_swbd string = fmt.Sprintf("N%02dE%03d.SRTMSWBD.raw", lat, lon)
-	var url string = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMGL3.003/2000.02.11/%s.zip", filename_hgt)
-	var cellElevationData elevationData
+	
+	var url string = fmt.Sprintf("https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL3.003/2000.02.11/%s.zip", filename_hgt)
+	var cellElevationData elevationData 
 	cellElevationData.data = make([]int16, CELL_SIZE*CELL_SIZE)
 	cellElevationData.width = CELL_SIZE
 	cellElevationData.lat = lat
 	cellElevationData.lon = lon
 	cellElevationData.received = false
 	var swbdData []byte
+	var hgtData []byte
 	fmt.Printf("\nLat:%d Lon:%d\n", lat, lon)
-	if !FileExists(filename_hgt) {
-		fmt.Printf(" Download hgt...\n")
-		res, err := http.Get(url)
-		if err != nil {
-			fmt.Println(err)
-		}
-		if res != nil{
-			defer res.Body.Close()
-		}
-		if res.StatusCode == 404 || err != nil {
-			fmt.Println("hgt not found")
-			cellElevationData.received = false
-			return cellElevationData, swbdData
-		}
-		UnzipFirstfile(res.Body, res.ContentLength, filename_hgt, false)
+	filename_hgt_zipped := fmt.Sprintf("terrain/%s.zip", filename_hgt)
+
+	if !FileExists(filename_hgt_zipped) {
+		fmt.Println(url)
 	}
 
-	url = fmt.Sprintf("http://e4ftl01.cr.usgs.gov/SRTM/SRTMSWBD.003/2000.02.11/%s.zip", filename_swbd)
-	filename_swbd_zipped := fmt.Sprintf("%s.zip", filename_swbd)
+	url = fmt.Sprintf("https://e4ftl01.cr.usgs.gov/MEASURES/SRTMSWBD.003/2000.02.11/%s.zip", filename_swbd)
+	filename_swbd_zipped := fmt.Sprintf("terrain/%s.zip", filename_swbd)
 	if !FileExists(filename_swbd_zipped) {
-		fmt.Println("Download SWBD...")
-		res, err := http.Get(url)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		defer res.Body.Close()
-		if res.StatusCode == 404 {
-			cellElevationData.received = false
-			return cellElevationData, swbdData
-		}
-		var swbdDataZipped []byte
-
-		swbdDataZipped, err = ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		err = ioutil.WriteFile(filename_swbd_zipped, swbdDataZipped, 666)
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-		swbdData, err = UnzipFirstfile(bytes.NewReader(swbdDataZipped), res.ContentLength, "", true)
-
-		if err != nil {
-			log.Fatalln(err)
-		}
-	} else {
-		var swbdFile *os.File
-		swbdFile, err := os.Open(filename_swbd_zipped)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		fi, err := swbdFile.Stat()
-		if err != nil {
-			log.Fatalln(err)
-		}
-		swbdData, err = UnzipFirstfile(swbdFile, fi.Size(), "", true)
-		if err != nil {
-			log.Fatalln(err)
-		}
+		fmt.Println(url)
+	} 
+	if dryrun || !FileExists(filename_hgt_zipped) {
+		return cellElevationData, swbdData
 	}
 
-	var hgtFile *os.File
-	var err error
-	if hgtFile, err = os.Open(filename_hgt); err != nil {
-		log.Fatalln(err)
+	if FileExists(filename_hgt_zipped) {
+		hgtData = unzip(filename_hgt_zipped)
 	}
+	if FileExists(filename_swbd_zipped) {
+		swbdData = unzip(filename_swbd_zipped)
+	}
+
 	var elevation int16
 	cellElevationData.received = true
+	hgtBuf := bytes.NewReader(hgtData)
 	for y := 0; y < CELL_SIZE; y++ {
 		for x := 0; x < CELL_SIZE; x++ {
-			binary.Read(hgtFile, binary.BigEndian, &elevation)
+			binary.Read(hgtBuf, binary.BigEndian, &elevation)
 			if swbdData[(y*3)*CELL_SWBD_SIZE+(x*3)] == 0xff {
 				elevation = water_level
 			}
@@ -274,7 +249,7 @@ func Download(lat int16, lon int16) (elevationData, []byte) {
 	return cellElevationData, swbdData
 
 }
-func degreeMap() {
+func degreeMap(dryrun bool) {
 	var mapDomain mapRectangle = area
 	var width int = int(math.Floor((mapDomain.East - mapDomain.West) * float64(CELL_SIZE)))
 	var height int = int(math.Floor((mapDomain.North - mapDomain.South) * float64(CELL_SIZE)))
@@ -282,7 +257,10 @@ func degreeMap() {
 
 	for lat := int16(math.Floor(mapDomain.South)); float64(lat) < mapDomain.North; lat++ {
 		for lon := int16(math.Floor(mapDomain.West)); float64(lon) < mapDomain.East; lon++ {
-			elevationData, _ := Download(lat, lon)
+			elevationData, _ := Download(lat, lon, dryrun)
+			if dryrun {
+				continue
+			}
 
 			var x_offset int = int(math.Floor((float64(elevationData.lon) - mapDomain.West) * float64(CELL_SIZE)))
 			var y_offset int = int(math.Floor((mapDomain.North - float64(elevationData.lat) - 1) * float64(CELL_SIZE)))
@@ -342,7 +320,7 @@ func intMax(a, b int) int {
 }
 
 
-func mercatorMap(pixelsize float64, base_lat float64) {
+func mercatorMap(pixelsize float64, base_lat float64, dryrun bool) {
 
 	var mapDomain mapRectangle = area
 	dv := lonToV(area.East) - lonToV(area.West)
@@ -363,7 +341,11 @@ func mercatorMap(pixelsize float64, base_lat float64) {
 
 	for lat := int16(math.Floor(mapDomain.South)); float64(lat) < mapDomain.North; lat++ {
 		for lon := int16(math.Floor(mapDomain.West)); float64(lon) < mapDomain.East; lon++ {
-			elevationData, swbdData := Download(lat, lon)
+			elevationData, swbdData := Download(lat, lon, dryrun)
+			
+			if dryrun {
+				continue
+			}
 
 			cell_lon_west := math.Max(float64(lon), area.West)
 			cell_lon_east := math.Min(float64(lon+1), area.East)
@@ -443,6 +425,10 @@ func mercatorMap(pixelsize float64, base_lat float64) {
 
 }
 func main() {
+	dryrun := flag.Bool("d", false, "check files")
+	filename := flag.String("f", "default.json", "filename")
+	flag.Parse()
+	fmt.Println(*dryrun)
 	var jsonIn jsonData
 	/*
 	dec := json.NewDecoder(os.Stdin)
@@ -451,7 +437,7 @@ func main() {
     */
 
 
-	json_file, err := ioutil.ReadFile(os.Args[1])
+	json_file, err := ioutil.ReadFile(*filename)
 	if err != nil{
 		log.Fatalln(err)
 	}
@@ -486,13 +472,13 @@ func main() {
 	switch drawing_type_string {
 	case "mercator":
 		drawing_style = Mercator
-		mercatorMap(jsonIn.Drawing.Pixelsize, jsonIn.Drawing.Baselat)
+		mercatorMap(jsonIn.Drawing.Pixelsize, jsonIn.Drawing.Baselat, *dryrun)
 	case "degree":
 		drawing_style = Degree
-		degreeMap()
+		degreeMap(*dryrun)
 	default:
 		drawing_style = Degree
-		degreeMap()
+		degreeMap(*dryrun)
 	}
 
 	lm.SaveImageLarge(jsonIn.Filename)
