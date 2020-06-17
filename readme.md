@@ -11,6 +11,7 @@ Simutrans用のMapデータを作れます
 2. NASA のサイトからダウンロードできるように，会員登録を済ませ，適当なデータをダウンロードできることを確かめてください．https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL3.003/2000.02.11/ 
 3. dryrunモードで地形のダウンロードURLの一覧を作成し，適当なテキストに吐きます． ` ./main -d -f meishin.json > urls.txt`
 4. ブラウザに一括ダウンロードのアドオンを追加します．Open Multiple Urls はFirefox版もChrome版もあります．
+  - FirefoxでSaveボタンを連打しないといけなくて辛いので，Chromeを使うか，ダイアログを止める(https://support.mozilla.org/en-US/questions/1279926)と良いです
 5. 一括ダウンロードツールに先程のテキストファイルを入れて，一括ダウンロードします．
 6. terrian/ フォルダ以下にコピーします
 
