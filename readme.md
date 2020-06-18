@@ -43,4 +43,6 @@ Simutrans用のMapデータを作れます
       - min 
       - max
       - bright
-      
+- waterIsTransparent
+  - 海面を透明にする　加工する際に便利
+  - あとから海面の色で塗りましょう
