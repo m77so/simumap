@@ -33,6 +33,7 @@ var drawing_style drawing
 var margin_style margin
 var area mapRectangle
 var lm largeMap
+var water_is_transparent bool
 
 type drawing int8
 
@@ -74,6 +75,7 @@ type jsonData struct {
 	Elevation elevation
 	Filename  string
 	Drawing   drawingStruct
+	WaterIsTransparent bool
 }
 type elevationData struct {
 	data     []int16
@@ -132,6 +134,9 @@ func elevationToColor(elevation int16) color.RGBA {
 	}
 
 	if elevation <= water_level {
+		if water_is_transparent {
+			return color.RGBA{0, 0, num, 0}
+		}
 		return color.RGBA{0, 0, num, 255}
 	}
 	return color.RGBA{0, num, 0, 255}
@@ -199,8 +204,20 @@ func unzip(filename string)  ([]byte) {
 }
 
 func Download(lat int16, lon int16, dryrun bool) (elevationData, []byte) {
-	var filename_hgt string = fmt.Sprintf("N%02dE%03d.SRTMGL3.hgt", lat, lon)
-	var filename_swbd string = fmt.Sprintf("N%02dE%03d.SRTMSWBD.raw", lat, lon)
+	var latStr string = "N"
+	var lonStr string = "E"
+	var filename_lat = lat
+	var filename_lon = lon
+	if lat < 0 {
+		latStr = "S"
+		filename_lat = -lat + 1
+	}
+	if lon < 0 {
+		lonStr = "W"
+		filename_lon = -lon + 1
+	}
+	var filename_hgt string = fmt.Sprintf("%s%02d%s%03d.SRTMGL3.hgt", latStr, filename_lat, lonStr, filename_lon)
+	var filename_swbd string = fmt.Sprintf("%s%02d%s%03d.SRTMSWBD.raw", latStr, filename_lat, lonStr, filename_lon)
 	
 	var url string = fmt.Sprintf("https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL3.003/2000.02.11/%s.zip", filename_hgt)
 	var cellElevationData elevationData 
@@ -223,14 +240,15 @@ func Download(lat int16, lon int16, dryrun bool) (elevationData, []byte) {
 	if !FileExists(filename_swbd_zipped) {
 		fmt.Println(url)
 	} 
-	if dryrun || !FileExists(filename_hgt_zipped) {
+	if dryrun || !FileExists(filename_hgt_zipped) || !FileExists(filename_swbd_zipped) {
 		return cellElevationData, swbdData
 	}
 
 	if FileExists(filename_hgt_zipped) {
 		hgtData = unzip(filename_hgt_zipped)
 	}
-	if FileExists(filename_swbd_zipped) {
+	swbdExists := FileExists(filename_swbd_zipped)
+	if swbdExists {
 		swbdData = unzip(filename_swbd_zipped)
 	}
 
@@ -240,7 +258,7 @@ func Download(lat int16, lon int16, dryrun bool) (elevationData, []byte) {
 	for y := 0; y < CELL_SIZE; y++ {
 		for x := 0; x < CELL_SIZE; x++ {
 			binary.Read(hgtBuf, binary.BigEndian, &elevation)
-			if swbdData[(y*3)*CELL_SWBD_SIZE+(x*3)] == 0xff {
+			if swbdExists && swbdData[(y*3)*CELL_SWBD_SIZE+(x*3)] == 0xff {
 				elevation = water_level
 			}
 			cellElevationData.data[y*cellElevationData.width+x] = elevation
@@ -450,6 +468,7 @@ func main() {
 
 	elevation_level = jsonIn.Elevation.Level // global
 	water_level = jsonIn.Elevation.Water     //global
+	water_is_transparent = jsonIn.WaterIsTransparent // global
 
 	margin_type_string := strings.ToLower(jsonIn.Drawing.Margin)
 	switch margin_type_string {

@@ -1,15 +1,15 @@
 {
-	"filename":"meishin250.png",
+	"filename":"uk1000.png",
 	"area":{
-		"east": 138.2, 
-		"north": 36.2, 
-		"south": 33.5, 
-		"west": 134
+		"east": 1.9, 
+		"north": 61, 
+		"south": 49, 
+		"west": -12
 	},
 	"drawing" : {
 		"style" : "Mercator",
 		"pixelsize" : 1000,
-		"baselat" : 35,
+		"baselat" : 54,
 		"margin" : "fill"
 	},
 	"elevation":{

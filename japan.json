@@ -1,10 +1,10 @@
 {
-	"filename":"meishin250.png",
+	"filename":"japan1000.png",
 	"area":{
-		"east": 138.2, 
-		"north": 36.2, 
-		"south": 33.5, 
-		"west": 134
+		"east": 150, 
+		"north": 50, 
+		"south": 20, 
+		"west": 120
 	},
 	"drawing" : {
 		"style" : "Mercator",
